@@ -1,3 +1,4 @@
+import { ImageCarousel } from '../components/ImageCarousel';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Star, MapPin, Wifi, Wind, Tv, Utensils, Coffee, ShieldCheck, ChevronLeft, Calendar as CalendarIcon, Users, Ban, CheckCircle2, Heart, Info, ChevronRight } from 'lucide-react';
 import { apartmentService, bookingService, favoriteService } from '../services/api';
@@ -154,7 +155,7 @@ export default function ApartmentDetail() {
             animate={{ opacity: 1, scale: 1 }}
             className="aspect-[16/8] rounded-[2.5rem] overflow-hidden shadow-2xl shadow-indigo-100/30 relative"
           >
-            <img src={apt.images[0]} alt={apt.title} className="w-full h-full object-cover" />
+            <ImageCarousel images={apt.images} title={apt.title} className="w-full h-full" showControls={true} />
             <button 
               onClick={toggleFavorite}
               className={`absolute top-8 right-8 w-14 h-14 rounded-2xl flex items-center justify-center shadow-2xl transition-all hover:scale-110 active:scale-95 ${isFavorite ? 'bg-indigo-600 text-white' : 'bg-white/80 backdrop-blur-md text-gray-700'}`}

@@ -4,6 +4,7 @@ import { apartmentService } from '../services/api';
 import { Apartment } from '../types';
 import { Link, useNavigate } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
+import { ImageCarousel } from '../components/ImageCarousel';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ export default function Home() {
     navigate('/listings');
   };
 
-  const filteredApartments = apartments.slice(0, 3);
+  const filteredApartments = apartments;
 
   if (isLoading && apartments.length === 0) {
     return (
@@ -97,22 +98,20 @@ export default function Home() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+        <div className="grid grid-flow-col auto-cols-max gap-6 overflow-x-auto pb-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {filteredApartments.map((apt) => (
             <motion.div
               layout
               key={apt.id}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-white rounded-[2.5rem] p-4 border border-gray-100 shadow-sm transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-indigo-50"
+              className="bg-white rounded-[2.5rem] p-4 border border-gray-100 shadow-sm transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-indigo-50 min-w-[300px] max-w-[300px]"
             >
-              <Link to={`/apartment/${apt.id}`} className="block">
-                <div className="h-64 w-full rounded-[1.8rem] mb-6 overflow-hidden relative shadow-inner">
-                  <img src={apt.images[0]} alt={apt.title} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full text-[11px] font-bold text-indigo-600 uppercase tracking-wider">НОВОЕ</div>
-                  <div className="absolute bottom-6 left-6 text-white font-bold text-lg tracking-tight">{apt.title}</div>
-                </div>
+              <Link to={`/apartment/${apt.id}`} className="block relative">
+                <ImageCarousel images={apt.images} title={apt.title} />
+                <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full text-[11px] font-bold text-indigo-600 uppercase tracking-wider">{apt.type}</div>
+                <div className="absolute bottom-6 left-6 text-white font-bold text-lg tracking-tight z-10">{apt.title}</div>
+              </Link>
                 <div className="px-3 pb-3 space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="text-xl font-bold text-brand-dark">
@@ -131,8 +130,7 @@ export default function Home() {
                     {apt.type} <span className="w-1 h-1 bg-gray-200 rounded-full" /> {apt.beds} Комн.
                   </p>
                 </div>
-              </Link>
-            </motion.div>
+              </motion.div>
           ))}
         </div>
       </section>

@@ -1,9 +1,9 @@
-import { User, Mail, ShieldCheck, MapPin, Calendar, Clock, CreditCard, LogOut, ChevronRight, Settings, Edit2, Lock, Check, X } from 'lucide-react';
+import { User, Mail, LogOut, ChevronRight, Edit2, Check, X, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import React, { useState } from 'react';
-import { authService } from '../services/api';
+import React, { useState, useEffect } from 'react';
+import { authService, bookingService } from '../services/api';
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -16,6 +16,16 @@ export default function Profile() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [bookings, setBookings] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      bookingService.getByUserId(user.id).then(setBookings).catch(console.error);
+    }
+  }, [isAuthenticated, user]);
+
+  const totalBookings = bookings.length;
+  const totalExpenses = bookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
 
   const handleLogout = () => {
     logout();
@@ -167,38 +177,46 @@ export default function Profile() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-        {/* Personal Stats */}
-        <div className="bg-white p-10 rounded-[3rem] border border-gray-50 soft-shadow space-y-8">
-          <h3 className="text-xl font-bold font-sans">Моя статистика</h3>
-          <div className="grid grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Поездок</p>
-              <p className="text-3xl font-bold text-brand-dark">12</p>
+        {/* Statistics & History */}
+        <div className="space-y-10">
+          <div className="bg-white p-10 rounded-[3rem] border border-gray-50 soft-shadow space-y-8">
+            <h3 className="text-xl font-bold font-sans">Моя активность</h3>
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Всего броней</p>
+                <p className="text-3xl font-bold text-brand-dark">{totalBookings}</p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Всего затрат</p>
+                <p className="text-3xl font-bold text-indigo-600">{totalExpenses.toLocaleString()} ₸</p>
+              </div>
             </div>
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Отзывов</p>
-              <p className="text-3xl font-bold text-brand-dark">8</p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Сэкономлено</p>
-              <p className="text-3xl font-bold text-indigo-600">45к ₸</p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Статус</p>
-              <p className="text-3xl font-bold text-indigo-600">Gold</p>
-            </div>
+          </div>
+
+          <div className="bg-white p-10 rounded-[3rem] border border-gray-50 soft-shadow space-y-6">
+            <h3 className="text-xl font-bold font-sans">История бронирований</h3>
+            {bookings.length === 0 ? (
+                <p className="text-gray-400">У вас пока нет бронирований.</p>
+            ) : (
+                <div className="space-y-4">
+                    {bookings.map((booking: any) => (
+                        <div key={booking.id} className="p-4 border border-gray-100 rounded-2xl flex items-center gap-4">
+                            <div className="font-bold text-sm tracking-tight text-brand-dark">{booking.apt.title}</div>
+                            <div className="text-xs text-gray-400">{booking.startDate} - {booking.endDate}</div>
+                            <div className="font-bold text-sm text-indigo-600 ml-auto">{booking.totalPrice.toLocaleString()} ₸</div>
+                        </div>
+                    ))}
+                </div>
+            )}
           </div>
         </div>
 
         {/* Quick Actions */}
         <div className="space-y-4">
           {[
-            { icon: Calendar, label: 'История бронирований', desc: 'Управление прошлыми поездками' },
-            { icon: CreditCard, label: 'Способы оплаты', desc: 'Ваши карты и счета' },
-            { icon: ShieldCheck, label: 'Безопасность', desc: 'Пароль и 2FA аутентификация' },
-            { icon: Settings, label: 'Предпочтения', desc: 'Язык, валюта и уведомления' },
+            { icon: MessageSquare, label: 'Сообщения', desc: 'Общение с администратором', path: '/messages' },
           ].map((item, i) => (
-            <button key={i} className="w-full group bg-white hover:bg-gray-50 p-6 rounded-[2rem] border border-gray-50 transition-all flex items-center justify-between">
+            <button key={i} onClick={() => item.path && navigate(item.path)} className="w-full group bg-white hover:bg-gray-50 p-6 rounded-[2rem] border border-gray-50 transition-all flex items-center justify-between">
               <div className="flex items-center gap-5">
                 <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-gray-400 group-hover:text-indigo-600 group-hover:scale-110 transition-all shadow-sm border border-gray-50">
                   <item.icon size={20} />

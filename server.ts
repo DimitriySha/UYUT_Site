@@ -8,12 +8,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const db = new Database('database.db');
+db.exec("PRAGMA foreign_keys = ON;");
 
 // Add status column if it doesn't exist (migration)
 const tableInfo = db.prepare("PRAGMA table_info(apartments)").all() as any[];
 const statusExists = tableInfo.some(col => col.name === 'status');
 if (!statusExists && tableInfo.length > 0) {
   db.exec("ALTER TABLE apartments ADD COLUMN status TEXT DEFAULT 'active'");
+}
+
+// Add is_read column if it doesn't exist (migration)
+const messageTableInfo = db.prepare("PRAGMA table_info(messages)").all() as any[];
+const isReadExists = messageTableInfo.some(col => col.name === 'is_read');
+if (!isReadExists && messageTableInfo.length > 0) {
+  db.exec("ALTER TABLE messages ADD COLUMN is_read BOOLEAN DEFAULT FALSE");
 }
 
 // Initialize database schema
@@ -63,11 +71,22 @@ db.exec(`
     FOREIGN KEY(user_id) REFERENCES users(id),
     FOREIGN KEY(apartment_id) REFERENCES apartments(id)
   );
+
+  CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY,
+    sender_id TEXT NOT NULL,
+    receiver_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    is_read BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY(sender_id) REFERENCES users(id),
+    FOREIGN KEY(receiver_id) REFERENCES users(id)
+  );
 `);
 
 // Seed initial data if empty
-const count = db.prepare('SELECT count(*) as count FROM apartments').get() as { count: number };
-if (count.count === 0) {
+const countApartments = db.prepare('SELECT count(*) as count FROM apartments').get() as { count: number };
+if (countApartments.count === 0) {
   const initialApartments = [
     {
       id: '1',
@@ -149,6 +168,32 @@ if (count.count === 0) {
   });
 }
 
+// Seed initial user if empty
+const userCount = db.prepare('SELECT count(*) as count FROM users').get() as { count: number };
+if (userCount.count === 0) {
+  db.prepare('INSERT INTO users (id, name, email, password, role) VALUES (?, ?, ?, ?, ?)').run(
+    'admin123',
+    'Администратор',
+    'admin@example.com',
+    'password123',
+    'admin'
+  );
+}
+
+function syncApartmentBookedDates(apartmentId: string) {
+  const activeBookings = db.prepare(`SELECT startDate, endDate FROM bookings WHERE apartmentId = ? AND status != 'cancelled'`).all(apartmentId) as any[];
+  const dates = new Set<string>();
+  for (const b of activeBookings) {
+    let current = new Date(b.startDate);
+    const end = new Date(b.endDate);
+    while (current <= end) {
+      dates.add(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
+    }
+  }
+  db.prepare(`UPDATE apartments SET bookedDates = ? WHERE id = ?`).run(JSON.stringify([...dates]), apartmentId);
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -208,6 +253,32 @@ async function startServer() {
     );
     
     res.status(201).json({ id });
+  });
+
+  app.put('/api/apartments/:id', (req, res) => {
+    const { title, location, price, rating, reviews, images, beds, maxGuests, baths, sqm, description, amenities, type } = req.body;
+    const id = req.params.id;
+    
+    try {
+      db.prepare(`
+        UPDATE apartments 
+        SET title = ?, location = ?, price = ?, rating = ?, reviews = ?, 
+            images = ?, beds = ?, maxGuests = ?, baths = ?, sqm = ?, 
+            description = ?, amenities = ?, type = ?
+        WHERE id = ?
+      `).run(
+        title, location, price, rating, reviews || 0,
+        JSON.stringify(images || []),
+        beds, maxGuests, baths, sqm, description,
+        JSON.stringify(amenities || []),
+        type,
+        id
+      );
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Database update error:', error);
+      res.status(500).json({ error: error.message });
+    }
   });
 
   app.patch('/api/apartments/:id/status', (req, res) => {
@@ -301,6 +372,13 @@ async function startServer() {
   // Booking Routes
   app.post('/api/bookings', (req, res) => {
     const { userId, apartmentId, startDate, endDate, totalPrice } = req.body;
+    
+    // Check if user exists
+    const user = db.prepare('SELECT 1 FROM users WHERE id = ?').get(userId);
+    if (!user) {
+      return res.status(403).json({ error: 'Guests cannot make bookings' });
+    }
+
     const id = 'b' + Math.random().toString(36).substr(2, 9);
     try {
       // 1. Insert booking
@@ -309,21 +387,7 @@ async function startServer() {
         VALUES (?, ?, ?, ?, ?, ?)
       `).run(id, apartmentId, userId, startDate, endDate, totalPrice);
       
-      // 2. Update apartment's bookedDates
-      const apt = db.prepare('SELECT bookedDates FROM apartments WHERE id = ?').get(apartmentId) as any;
-      const currentDates = JSON.parse(apt.bookedDates || '[]');
-      
-      // Calculate all dates between start and end
-      const datesToBook = [];
-      let current = new Date(startDate);
-      const last = new Date(endDate);
-      while(current <= last) {
-        datesToBook.push(current.toISOString().split('T')[0]);
-        current.setDate(current.getDate() + 1);
-      }
-      
-      const newBookedDates = [...new Set([...currentDates, ...datesToBook])];
-      db.prepare('UPDATE apartments SET bookedDates = ? WHERE id = ?').run(JSON.stringify(newBookedDates), apartmentId);
+      syncApartmentBookedDates(apartmentId);
 
       res.status(201).json({ id, ...req.body });
     } catch (error: any) {
@@ -349,17 +413,43 @@ async function startServer() {
     res.json(bookings);
   });
 
+  // User Routes
+  app.get('/api/users/:id', (req, res) => {
+    const user = db.prepare('SELECT id, name, email, role FROM users WHERE id = ?').get(req.params.id);
+    if (user) {
+      res.json(user);
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
+  });
+
   // Favorites Routes
   app.post('/api/favorites/toggle', (req, res) => {
     const { userId, apartmentId } = req.body;
-    const exists = db.prepare('SELECT 1 FROM favorites WHERE user_id = ? AND apartment_id = ?').get(userId, apartmentId);
+    console.log('Toggling favorite:', { userId, apartmentId });
     
-    if (exists) {
-      db.prepare('DELETE FROM favorites WHERE user_id = ? AND apartment_id = ?').run(userId, apartmentId);
-      res.json({ status: 'removed' });
-    } else {
-      db.prepare('INSERT INTO favorites (user_id, apartment_id) VALUES (?, ?)').run(userId, apartmentId);
-      res.json({ status: 'added' });
+    // Check if user exists
+    const user = db.prepare('SELECT 1 FROM users WHERE id = ?').get(userId);
+    if (!user) {
+      return res.status(403).json({ error: 'Guests cannot add to favorites' });
+    }
+    
+    try {
+      const exists = db.prepare('SELECT 1 FROM favorites WHERE user_id = ? AND apartment_id = ?').get(userId, apartmentId);
+    
+      if (exists) {
+        db.prepare('DELETE FROM favorites WHERE user_id = ? AND apartment_id = ?').run(userId, apartmentId);
+        res.json({ status: 'removed' });
+      } else {
+        db.prepare('INSERT INTO favorites (user_id, apartment_id) VALUES (?, ?)').run(userId, apartmentId);
+        res.json({ status: 'added' });
+      }
+    } catch (error: any) {
+      console.error('Favorite toggle error:', error);
+      res.status(500).json({ 
+        error: error.message, 
+        debug: { userId, apartmentId }
+      });
     }
   });
 
@@ -384,6 +474,77 @@ async function startServer() {
     res.json({ isFavorite: !!exists });
   });
 
+  // Messages Routes
+  app.get('/api/messages/:userId', (req, res) => {
+    const { userId } = req.params;
+    const messages = db.prepare(`
+      SELECT * FROM messages 
+      WHERE sender_id = ? OR receiver_id = ? 
+      ORDER BY timestamp ASC
+    `).all(userId, userId);
+    res.json(messages);
+  });
+
+  app.get('/api/admin/users/with-messages', (req, res) => {
+    const users = db.prepare(`
+      SELECT DISTINCT u.*, 
+        (SELECT COUNT(*) FROM messages m2 WHERE m2.sender_id = u.id AND m2.receiver_id = 'admin123' AND m2.is_read = 0) as unread_count
+      FROM users u
+      JOIN messages m ON u.id = m.sender_id OR u.id = m.receiver_id
+      WHERE u.id != ?
+    `).all('admin123');
+    res.json(users);
+  });
+
+  app.post('/api/messages', (req, res) => {
+    const { senderId, receiverId, content } = req.body;
+    const id = Math.random().toString(36).substr(2, 9);
+    
+    db.prepare('INSERT INTO messages (id, sender_id, receiver_id, content, is_read) VALUES (?, ?, ?, ?, ?)').run(
+      id, senderId, receiverId, content, receiverId === 'admin123' ? 0 : 1
+    );
+    
+    res.json({ id, sender_id: senderId, receiver_id: receiverId, content, timestamp: new Date().toISOString() });
+  });
+
+  app.patch('/api/messages/mark-read/:senderId', (req, res) => {
+    const { senderId } = req.params;
+    db.prepare('UPDATE messages SET is_read = 1 WHERE sender_id = ? AND receiver_id = ?').run(senderId, 'admin123');
+    res.json({ success: true });
+  });
+
+  app.patch('/api/bookings/:id/cancel', (req, res) => {
+    const { id } = req.params;
+    const booking = db.prepare('SELECT apartmentId FROM bookings WHERE id = ?').get(id) as any;
+    if (booking) {
+      db.prepare('UPDATE bookings SET status = ? WHERE id = ?').run('cancelled', id);
+      syncApartmentBookedDates(booking.apartmentId);
+    }
+    res.json({ success: true });
+  });
+
+  app.delete('/api/bookings/:id', (req, res) => {
+    const { id } = req.params;
+    const booking = db.prepare('SELECT apartmentId FROM bookings WHERE id = ?').get(id) as any;
+    if (booking) {
+      db.prepare('DELETE FROM bookings WHERE id = ?').run(id);
+      syncApartmentBookedDates(booking.apartmentId);
+    }
+    res.json({ success: true });
+  });
+
+  app.post('/api/debug/db/clear', (req, res) => {
+    try {
+      db.prepare('DELETE FROM favorites').run();
+      db.prepare('DELETE FROM bookings').run();
+      db.prepare('DELETE FROM users').run();
+      db.prepare('UPDATE apartments SET bookedDates = ?').run(JSON.stringify([]));
+      res.json({ success: true, message: 'Favorites, bookings, and users cleared, and apartment bookings reset.' });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // DB explorer endpoints (for the user to see the database)
   app.get('/api/debug/db/tables', (req, res) => {
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
@@ -401,9 +562,9 @@ async function startServer() {
 
   app.get('/api/admin/stats', (req, res) => {
     try {
-      const totalRevenue = db.prepare('SELECT SUM(totalPrice) as total FROM bookings WHERE status != "cancelled"').get() as { total: number | null };
+      const totalRevenue = db.prepare('SELECT SUM(totalPrice) as total FROM bookings WHERE status != \'cancelled\'').get() as { total: number | null };
       const totalBookings = db.prepare('SELECT COUNT(*) as count FROM bookings').get() as { count: number };
-      const totalApartments = db.prepare('SELECT COUNT(*) as count FROM apartments WHERE status IS NULL OR status = "active"').get() as { count: number };
+      const totalApartments = db.prepare('SELECT COUNT(*) as count FROM apartments WHERE status IS NULL OR status = \'active\'').get() as { count: number };
       const uniqueGuests = db.prepare('SELECT COUNT(DISTINCT userId) as count FROM bookings').get() as { count: number };
       
       // Monthly revenue (simplified)
@@ -411,7 +572,7 @@ async function startServer() {
       const monthlyRevenue = db.prepare(`
         SELECT strftime('%Y-%m', startDate) as month, SUM(totalPrice) as total 
         FROM bookings 
-        WHERE status != "cancelled" AND startDate IS NOT NULL
+        WHERE status != 'cancelled' AND startDate IS NOT NULL
         GROUP BY month 
         ORDER BY month DESC 
         LIMIT 6

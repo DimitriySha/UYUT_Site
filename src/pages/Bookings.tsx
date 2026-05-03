@@ -1,9 +1,9 @@
 import { motion } from 'motion/react';
-import { Calendar, CheckCircle2, Clock } from 'lucide-react';
+import { Calendar, CheckCircle2, Clock, X } from 'lucide-react';
 import { bookingService } from '../services/api';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 export default function Bookings() {
   const { user, isAuthenticated } = useAuth();
@@ -77,10 +77,10 @@ export default function Bookings() {
                   <p className="text-sm text-gray-500 font-light">{booking.apt.location}</p>
                 </div>
                 <div className={`flex items-center gap-2 px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                  booking.status === 'upcoming' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'
+                  booking.status === 'confirmed' ? 'bg-blue-50 text-blue-600' : booking.status === 'cancelled' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
                 }`}>
-                  {booking.status === 'upcoming' ? <Clock size={12} /> : <CheckCircle2 size={12} />}
-                  {booking.status === 'upcoming' ? 'Предстоящее' : 'Завершено'}
+                  {booking.status === 'confirmed' ? <Clock size={12} /> : booking.status === 'cancelled' ? <X size={12} /> : <CheckCircle2 size={12} />}
+                  {booking.status === 'confirmed' ? 'Предстоящее' : booking.status === 'cancelled' ? 'Отменено' : 'Завершено'}
                 </div>
               </div>
 
@@ -101,9 +101,19 @@ export default function Bookings() {
             </div>
             
             <div className="flex flex-col gap-2 w-full md:w-auto">
-               <button className="px-6 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm font-bold hover:bg-gray-100 transition-colors w-full">
+               <Link to={`/apartment/${booking.apt.id}`} className="px-6 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm font-bold hover:bg-gray-100 transition-colors w-full text-center">
                 Детали
-               </button>
+               </Link>
+               {booking.status === 'confirmed' && (
+                 <button 
+                 onClick={async() => {
+                   await bookingService.cancel(booking.id);
+                   setBookings(prev => prev.map(b => b.id === booking.id ? {...b, status: 'cancelled'} : b));
+                 }}
+                 className="px-6 py-3 bg-red-50 text-red-600 rounded-2xl text-sm font-bold hover:bg-red-100 transition-colors w-full text-center">
+                   Отменить
+                 </button>
+               )}
                {booking.status === 'completed' && (
                  <button className="px-6 py-3 gradient-bg text-white rounded-2xl text-sm font-bold hover:opacity-90 transition-opacity w-full">
                   Оставить отзыв

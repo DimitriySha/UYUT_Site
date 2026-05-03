@@ -22,6 +22,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return saved ? JSON.parse(saved) : null;
   });
 
+  useEffect(() => {
+    const saved = localStorage.getItem('auth_user');
+    if (saved) {
+      const parsedUser = JSON.parse(saved);
+      // Verify user exists in db
+      fetch(`/api/users/${parsedUser.id}`)
+        .then(res => {
+          if (!res.ok) {
+            // User doesn't exist anymore
+            setUser(null);
+            localStorage.removeItem('auth_user');
+          }
+        })
+        .catch(() => {
+          // If network error or something else, maybe keep user or logout?
+          // For now, let's be safe and logout.
+          setUser(null);
+          localStorage.removeItem('auth_user');
+        });
+    }
+  }, []);
+
   const login = (userData: User) => {
     setUser(userData);
     localStorage.setItem('auth_user', JSON.stringify(userData));

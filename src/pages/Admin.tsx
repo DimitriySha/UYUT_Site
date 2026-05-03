@@ -1,14 +1,47 @@
-import { Plus, Star, MoreHorizontal, X, Camera, MapPin, Tag, TrendingUp, Users, CreditCard, LayoutDashboard, Building2, ShieldCheck, Trash2, Wind, Database as DbIcon, Calendar as CalendarIcon } from 'lucide-react';
+import { Plus, Star, MoreHorizontal, X, Camera, MapPin, Tag, TrendingUp, Users, CreditCard, LayoutDashboard, Building2, ShieldCheck, Trash2, Wind, Database as DbIcon, Calendar as CalendarIcon, MessageSquare } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
-import { apartmentService, bookingService } from '../services/api';
+import { apartmentService, bookingService, messageService } from '../services/api';
 import { Apartment, Booking } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
 export default function Admin() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'objects' | 'bookings' | 'database'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'objects' | 'bookings' | 'database' | 'messages'>('dashboard');
   const [apartments, setApartments] = useState<Apartment[]>([]);
   const [adminBookings, setAdminBookings] = useState<Booking[]>([]);
+  const [messagesUsers, setMessagesUsers] = useState<any[]>([]);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [content, setContent] = useState('');
+
+  useEffect(() => {
+    if (activeTab === 'messages') {
+        messageService.getUsersWithMessages().then(setMessagesUsers).catch(console.error);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+      if (selectedUser) {
+          const fetchMessages = () => {
+              messageService.getByUserId(selectedUser.id).then(setMessages).catch(console.error);
+          };
+          fetchMessages();
+          const interval = setInterval(fetchMessages, 3000);
+          return () => clearInterval(interval);
+      }
+  }, [selectedUser]);
+
+  const handleSendMessage = async () => {
+      if (!selectedUser || !content.trim()) return;
+      try {
+          const newMessage = await messageService.send('admin123', selectedUser.id, content);
+          setMessages([...messages, newMessage]);
+          setContent('');
+      } catch (e) {
+          console.error(e);
+      }
+  };
+
   const [stats, setStats] = useState<{
     totalRevenue: number;
     totalBookings: number;
@@ -88,6 +121,7 @@ export default function Admin() {
     fetchStats();
   }, []);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingApartmentId, setEditingApartmentId] = useState<string | null>(null);
   const [newApt, setNewApt] = useState({
     title: '',
     location: '',
@@ -103,10 +137,29 @@ export default function Admin() {
     amenities: 'Wi-Fi, Кухня, Кондиционер'
   });
 
-  const handleAdd = async (e: React.FormEvent) => {
+  const handleEditClick = (apt: Apartment) => {
+    setEditingApartmentId(apt.id);
+    setNewApt({
+      title: apt.title,
+      location: apt.location,
+      price: apt.price.toString(),
+      description: apt.description,
+      type: apt.type,
+      beds: apt.beds.toString(),
+      rating: apt.rating.toString(),
+      sqm: apt.sqm.toString(),
+      maxGuests: apt.maxGuests.toString(),
+      baths: apt.baths.toString(),
+      images: apt.images.join(', '),
+      amenities: apt.amenities.join(', ')
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const addedApt = {
+      const apartmentData = {
         ...newApt,
         price: parseInt(newApt.price),
         beds: parseInt(newApt.beds),
@@ -114,12 +167,19 @@ export default function Admin() {
         sqm: parseInt(newApt.sqm),
         maxGuests: parseInt(newApt.maxGuests),
         baths: parseInt(newApt.baths),
-        images: newApt.images ? newApt.images.split(',').map(s => s.trim()) : ['https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&q=80&w=800'],
+        images: newApt.images ? newApt.images.split(',').map(s => s.trim()) : [],
         amenities: newApt.amenities.split(',').map(s => s.trim()),
       };
-      await apartmentService.create(addedApt as any);
+
+      if (editingApartmentId) {
+        await apartmentService.update(editingApartmentId, apartmentData as any);
+      } else {
+        await apartmentService.create(apartmentData as any);
+      }
+      
       await fetchApartments();
       setIsModalOpen(false);
+      setEditingApartmentId(null);
       setNewApt({
         title: '',
         location: '',
@@ -213,6 +273,12 @@ export default function Admin() {
               className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'database' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
             >
               <DbIcon size={16} /> База данных
+            </button>
+            <button 
+              onClick={() => setActiveTab('messages')}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'messages' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+            >
+              <MessageSquare size={16} /> Сообщения
             </button>
           </div>
         </div>
@@ -389,6 +455,14 @@ export default function Admin() {
                             {apt.status === 'active' ? 'Активен' : 'Пауза'}
                           </button>
                           
+                          <button 
+                            onClick={() => handleEditClick(apt)}
+                            className="p-2.5 text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all border border-transparent hover:border-indigo-100 shadow-sm hover:shadow-indigo-100/20"
+                            title="Редактировать"
+                          >
+                            <MoreHorizontal size={20} />
+                          </button>
+                          
                           {apt.bookingsCount && apt.bookingsCount > 0 ? (
                             <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-[10px] font-bold text-gray-400 uppercase tracking-widest opacity-60 cursor-not-allowed">
                                <ShieldCheck size={16} className="text-indigo-400" />
@@ -427,7 +501,7 @@ export default function Admin() {
                     <th className="px-8 py-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Апартаменты</th>
                     <th className="px-8 py-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Даты</th>
                     <th className="px-8 py-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Сумма</th>
-                    <th className="px-8 py-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Статус</th>
+                    <th className="px-8 py-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Статус / Действия</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -452,10 +526,21 @@ export default function Admin() {
                       <td className="px-8 py-8">
                         <p className="font-bold text-brand-dark">{booking.totalPrice?.toLocaleString()} ₸</p>
                       </td>
-                      <td className="px-8 py-8">
-                        <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">
-                          Подтверждено
+                      <td className="px-8 py-8 flex flex-col gap-2">
+                        <span className={`${booking.status === 'cancelled' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'} px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest text-center`}>
+                          {booking.status === 'cancelled' ? 'Отменено' : 'Подтверждено'}
                         </span>
+                        {booking.status === 'cancelled' && (
+                          <button 
+                            onClick={async () => {
+                              await bookingService.deleteBooking(booking.id);
+                              setAdminBookings(prev => prev.filter(b => b.id !== booking.id));
+                            }}
+                            className="text-red-500 text-[10px] font-bold underline hover:text-red-700"
+                          >
+                            Удалить
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -468,6 +553,43 @@ export default function Admin() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </motion.div>
+        ) : activeTab === 'messages' ? (
+          <motion.div 
+            key="messages"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="flex h-[600px] bg-white rounded-[3rem] shadow-sm border border-gray-100 overflow-hidden"
+          >
+            <div className="w-80 border-r border-gray-100 p-4 space-y-2 overflow-y-auto">
+              {messagesUsers.map(user => (
+                  <button key={user.id} onClick={() => { setSelectedUser(user); messageService.markAsRead(user.id).then(() => {
+                      setMessagesUsers(prev => prev.map(u => u.id === user.id ? {...u, unread_count: 0} : u));
+                  }); }} className={`w-full p-4 rounded-full text-left font-bold text-sm flex justify-between items-center ${selectedUser?.id === user.id ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50'}`}>
+                      {user.name}
+                      {user.unread_count > 0 && <span className="bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px]">{user.unread_count}</span>}
+                  </button>
+              ))}
+            </div>
+            <div className="flex-grow flex flex-col">
+              {selectedUser ? (
+                  <>
+                    <div className="p-4 border-b border-gray-100 font-bold">Чат с {selectedUser.name}</div>
+                    <div className="flex-grow p-4 overflow-y-auto space-y-4">
+                        {messages.map(msg => (
+                            <div key={msg.id} className={`p-3 rounded-2xl max-w-[70%] ${msg.sender_id === 'admin123' ? 'ml-auto bg-indigo-600 text-white' : 'bg-gray-100'}`}>{msg.content}</div>
+                        ))}
+                    </div>
+                    <div className="p-4 border-t border-gray-100 flex gap-2">
+                        <input value={content} onChange={e => setContent(e.target.value)} className="flex-grow px-4 py-2 bg-gray-50 rounded-full" placeholder="Сообщение..." />
+                        <button onClick={handleSendMessage} className="px-6 py-2 bg-indigo-600 text-white rounded-full">Отправить</button>
+                    </div>
+                  </>
+              ) : (
+                <div className="flex-grow flex items-center justify-center text-gray-400">Выберите пользователя</div>
+              )}
             </div>
           </motion.div>
         ) : (
@@ -548,14 +670,16 @@ export default function Admin() {
                   <div className="w-10 h-10 rounded-xl gradient-bg flex items-center justify-center text-white">
                     <Building2 size={20} />
                   </div>
-                  <h2 className="text-xl font-bold text-brand-dark">Конструктор объекта</h2>
+                  <h2 className="text-xl font-bold text-brand-dark">
+                    {editingApartmentId ? 'Редактирование' : 'Конструктор объекта'}
+                  </h2>
                 </div>
                 <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400">
                   <X size={20} />
                 </button>
               </div>
 
-              <form onSubmit={handleAdd} className="overflow-y-auto custom-scrollbar flex-grow">
+              <form onSubmit={handleSubmit} className="overflow-y-auto custom-scrollbar flex-grow">
                 <main className="p-10 space-y-12">
                   {/* Hero Image Section */}
                   <div className="relative aspect-[21/9] rounded-[3rem] overflow-hidden bg-gray-200 shadow-inner group">
@@ -717,7 +841,7 @@ export default function Admin() {
                           type="submit"
                           className="w-full gradient-bg text-white py-5 rounded-[2rem] font-bold text-lg shadow-xl shadow-indigo-200/50 hover:scale-[1.03] active:scale-95 transition-all uppercase tracking-widest"
                         >
-                          Опубликовать
+                          {editingApartmentId ? 'Сохранить изменения' : 'Опубликовать'}
                         </button>
 
                         <button 

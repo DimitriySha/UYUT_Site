@@ -1,0 +1,72 @@
+import { Apartment } from './types';
+
+export const APARTMENTS: Apartment[] = [
+  {
+    id: '1',
+    title: 'Лофт "Modern Sky"',
+    location: 'Астана, ул. Нур-Султан',
+    price: 25000,
+    rating: 4.8,
+    reviews: 124,
+    images: ['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&q=80&w=1200'],
+    beds: 1,
+    maxGuests: 2,
+    baths: 1,
+    sqm: 45,
+    description: 'Стильный и компактный лофт с потрясающим видом на Байтерек. Идеально подходит для деловых поездок и пар.',
+    amenities: ['Wi-Fi', 'Кухня', 'Кондиционер', 'Парковка'],
+    type: 'Studio',
+    bookedDates: ['2024-05-10', '2024-05-11', '2024-05-12']
+  },
+  {
+    id: '2',
+    title: 'Панорамный люкс EXPO',
+    location: 'Астана, район EXPO',
+    price: 45000,
+    rating: 4.9,
+    reviews: 86,
+    images: ['https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&q=80&w=1200'],
+    beds: 2,
+    maxGuests: 4,
+    baths: 2,
+    sqm: 85,
+    description: 'Просторные апартаменты с панорамными окнами и премиальной мебелью. Расположены в самом сердце района EXPO.',
+    amenities: ['Wi-Fi', 'Кухня', 'Кондиционер', 'Парковка', 'Бассейн', 'Спортзал'],
+    type: 'Luxury',
+    bookedDates: ['2024-05-15', '2024-05-16']
+  },
+  {
+    id: '3',
+    title: 'Уютное семейное гнездышко',
+    location: 'Астана, Левый берег',
+    price: 32000,
+    rating: 4.7,
+    reviews: 210,
+    images: ['https://images.unsplash.com/photo-1493809842364-78817add7ffb?auto=format&fit=crop&q=80&w=1200'],
+    beds: 2,
+    maxGuests: 5,
+    baths: 1,
+    sqm: 65,
+    description: 'Теплое и гостеприимное пространство для семей. Рядом с парками и торговыми центрами.',
+    amenities: ['Wi-Fi', 'Кухня', 'Стиральная машина', 'ТВ'],
+    type: '2-Bedroom',
+    bookedDates: []
+  },
+  {
+    id: '4',
+    title: 'Минималистичный городской оазис',
+    location: 'Астана, проспект Республики',
+    price: 18000,
+    rating: 4.5,
+    reviews: 45,
+    images: ['https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&q=80&w=1200'],
+    beds: 1,
+    maxGuests: 2,
+    baths: 1,
+    sqm: 40,
+    description: 'Чистые линии и функциональный дизайн для современного кочевника.',
+    amenities: ['Wi-Fi', 'Кухня', 'Рабочая зона'],
+    type: '1-Bedroom',
+    bookedDates: ['2024-05-01', '2024-05-02', '2024-05-03', '2024-05-04']
+  }
+];
